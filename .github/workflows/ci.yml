@@ -43,13 +43,14 @@ jobs:
           python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
 
       # Step 6: Check the app imports without crashing
-      - name: Verify app starts
+      - - name: Verify app starts
         working-directory: backend
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          PYTHONPATH: /home/runner/work/scam-shield-ai/scam-shield-ai/backend
         run: |
           python -c "from app.main import app; print('App imported successfully')"
 
