@@ -38,3 +38,10 @@ venv/
 # Models
 models/
 nltk_data/
+
+
+# Large dataset files
+*.zip
+*.tar.gz
+*.tar
+backend/dataset*.zip
