@@ -1,5 +1,9 @@
 name: Scam Shield AI — CI/CD
 
+# --- Fix 6: opt into Node 24 now, before June 2026 forced cutover ---
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [ main ]
@@ -7,21 +11,22 @@ on:
     branches: [ main ]
 
 jobs:
+
+  # ─────────────────────────────────────────────
+  # JOB 1: Backend — install, lint, import check
+  # ─────────────────────────────────────────────
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Download your code onto the CI runner
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up Python
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Step 3: Cache pip packages so re-runs are fast
       - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
@@ -30,44 +35,153 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # Step 4: Install dependencies
       - name: Install dependencies
         working-directory: backend
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      # Step 5: Pre-download NLTK data
+      # Fix 2: Run NLTK download from inside backend/ so os.getcwd()
+      # matches what the app expects at runtime
       - name: Download NLTK data
+        working-directory: backend
         run: |
-          python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
+          python -c "
+          import nltk, os
+          data_dir = os.path.join(os.getcwd(), 'nltk_data')
+          os.makedirs(data_dir, exist_ok=True)
+          nltk.download('punkt',     download_dir=data_dir, quiet=True)
+          nltk.download('punkt_tab', download_dir=data_dir, quiet=True)
+          print('NLTK data downloaded to', data_dir)
+          "
 
-      # Step 6: Check the app imports without crashing
-      - name: Verify app starts
+      # Fix 8: Warn clearly when secrets are missing so failures are obvious
+      - name: Validate required secrets exist
+        run: |
+          missing=0
+          for var in OPENAI_API_KEY GOOGLE_API_KEY VIRUSTOTAL_API_KEY SECRET_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::warning::Secret $var is not set — runtime calls will fail"
+              missing=$((missing + 1))
+            else
+              echo "✓ $var is set"
+            fi
+          done
+        env:
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY:     ${{ secrets.GOOGLE_API_KEY }}
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          SECRET_KEY:         ${{ secrets.SECRET_KEY }}
+
+      # Fix 1: Removed the hardcoded cd. PYTHONPATH uses $GITHUB_WORKSPACE
+      # which is always correct regardless of repo/org name.
+      - name: Verify app imports without crashing
         working-directory: backend
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY:     ${{ secrets.GOOGLE_API_KEY }}
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SECRET_KEY:         ${{ secrets.SECRET_KEY }}
+          PYTHONPATH:         ${{ github.workspace }}/backend
         run: |
-          cd /home/runner/work/scam-shield-ai/scam-shield-ai/backend
-          PYTHONPATH=/home/runner/work/scam-shield-ai/scam-shield-ai/backend python -c "from app.main import app; print('App imported successfully')"
+          python -c "from app.main import app; print('App imported successfully')"
 
-  docker-build:
+  # ─────────────────────────────────────────────
+  # JOB 2: Frontend — install and build
+  # ─────────────────────────────────────────────
+  frontend-build:
     runs-on: ubuntu-latest
-    needs: build-and-test
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Build the Docker image to confirm the Dockerfile is valid
-      - name: Build Docker image
-        working-directory: backend
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  # ─────────────────────────────────────────────
+  # JOB 3: Docker — build backend image + smoke test
+  # ─────────────────────────────────────────────
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [ build-and-test, frontend-build ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Fix 3: Cache Docker layers so torch (190MB) isn't re-downloaded every run
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('backend/Dockerfile', 'backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      # Fix 4: Build context is backend/ (correct for single-service test)
+      # The --cache-from/to wires up the layer cache
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: scam-shield-backend:ci
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to:   type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      # Prevent cache from growing unboundedly (GitHub's recommended pattern)
+      - name: Rotate layer cache
         run: |
-          docker build -t scam-shield-ai:test .
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Confirm image was built
+        run: docker images scam-shield-backend:ci
+
+      # Fix 7: Actually run the container and hit the health endpoint
+      # so a broken CMD or missing module is caught here, not in production
+      - name: Smoke test — container starts and responds
         run: |
-          docker images scam-shield-ai:test
+          docker run -d \
+            --name ci-backend \
+            -p 8000:8000 \
+            -e OPENAI_API_KEY=dummy \
+            -e GOOGLE_API_KEY=dummy \
+            -e VIRUSTOTAL_API_KEY=dummy \
+            -e SECRET_KEY=ci-test-secret \
+            scam-shield-backend:ci
+
+          # Wait up to 30s for the server to be ready
+          echo "Waiting for backend to start..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/ > /dev/null 2>&1; then
+              echo "✓ Backend is responding"
+              break
+            fi
+            echo "  attempt $i/15 — not ready yet"
+            sleep 2
+          done
+
+          # Final check — fails the job if backend never came up
+          curl -sf http://localhost:8000/ | grep -q "Scam Shield" \
+            || (docker logs ci-backend && exit 1)
+
+          docker stop ci-backend
+          docker rm ci-backend

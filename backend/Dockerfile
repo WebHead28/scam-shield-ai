@@ -2,30 +2,34 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+# System deps
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Python deps — separate torch layer for better cache
 COPY requirements.txt .
-
-# Install PyTorch CPU-only first (avoids pulling the 2GB CUDA version)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --timeout=120 --retries=5 -r requirements.txt
 
-# Install all other dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Download NLTK data
+RUN python -c "\
+import nltk; \
+nltk.download('punkt', quiet=True); \
+nltk.download('punkt_tab', quiet=True)"
 
-# Pre-download NLTK data at build time so first requests don't fail
-RUN python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
+# --- NEW: Bake distilgpt2 into the image at build time ---
+# This prevents runtime downloads, rate-limit hits, and cold-start latency
+RUN python -c "\
+from transformers import AutoModelForCausalLM, AutoTokenizer; \
+AutoTokenizer.from_pretrained('distilgpt2', cache_dir='/app/models'); \
+AutoModelForCausalLM.from_pretrained('distilgpt2', cache_dir='/app/models')"
 
 COPY . .
 
-# Create writable temp directory for PDF reports
+# Reports dir — inside the container only, managed by named volume
 RUN mkdir -p /tmp/scam_shield_reports
-
-ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

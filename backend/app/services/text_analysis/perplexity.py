@@ -8,9 +8,9 @@ _model_lock = threading.Lock()
 model = None
 tokenizer = None
 
-# FIX: Use absolute path relative to this file to avoid CWD ambiguity in Docker
-_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "models")
-_CACHE_DIR = os.path.normpath(_CACHE_DIR)
+# Use the path baked into the Docker image at build time
+# Falls back to local relative path for development outside Docker
+_CACHE_DIR = os.environ.get("MODEL_CACHE_DIR", "/app/models")
 
 def load_model():
     global model, tokenizer

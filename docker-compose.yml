@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scam-shield-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - MODEL_CACHE_DIR=/app/models
+      - PYTHONPATH=/app
+    volumes:
+      - reports_data:/tmp/scam_shield_reports
+      - model_cache:/app/models
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scam-shield-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  reports_data:
+  model_cache:

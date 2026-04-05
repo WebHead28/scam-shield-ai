@@ -1,39 +1,28 @@
-import axios from 'axios'
+import axios from "axios";
 
-const BASE_URL = 'http://localhost:8000'
+const API = axios.create({
+  baseURL: "/api",
+  headers: { "Content-Type": "application/json" },
+});
 
-export const api = axios.create({
-  baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-})
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-// Attach token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('ss_token')
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`
-  }
-  return config
-})
+// Named export "api" — required by AuthContext.jsx
+export const api = API;
 
-// Analyze text for AI detection
-export const analyzeText = (text) =>
-  api.post('/analyze-text', { text })
+export const registerUser    = (data) => API.post("/register", data);
+export const loginUser       = (data) => API.post("/login", data);
+export const analyzeText     = (text) => API.post("/analyze-text",     { text });
+export const analyzePhishing = (text) => API.post("/analyze-phishing", { text });
 
-// Analyze message for phishing
-export const analyzePhishing = (text) =>
-  api.post('/analyze-phishing', { text })
+// "analyzeURL" (capital URL) — required by URLAnalyzer.jsx and ReportGenerator.jsx
+export const analyzeURL      = (url)  => API.post("/analyze-url",      { url });
 
-// Analyze URL
-export const analyzeURL = (url) =>
-  api.post('/analyze-url', { url })
+export const generateReport  = (input_text, analysis_result) =>
+  API.post("/generate-report", { input_text, analysis_result }, { responseType: "blob" });
 
-// Generate PDF report
-export const generateReport = async (input_text, analysis_result) => {
-  const response = await api.post(
-    '/generate-report',
-    { input_text, analysis_result },
-    { responseType: 'blob' }
-  )
-  return response
-}
+export default API;

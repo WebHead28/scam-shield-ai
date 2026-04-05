@@ -1,9 +1,12 @@
-__pycache__/
+__pycache__
 *.pyc
 *.pyo
 .env
 .git
-venv/
+node_modules
+*.log
 models/
 nltk_data/
+*.db
+*.sqlite3
 scam_shield.db
