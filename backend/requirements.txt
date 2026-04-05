@@ -1,0 +1,47 @@
+# Web framework
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy
+
+# Validation
+pydantic
+
+# Config
+python-dotenv
+
+# Auth
+# FIX: Added [cryptography] extra — without it, python-jose silently falls back
+# to the slower, less secure python-ecdsa backend
+passlib[bcrypt]
+python-jose[cryptography]
+
+# HTTP
+requests
+
+# AI / LLM
+# FIX: Pinned openai>=1.0.0 — the v0.x → v1.x API was a full breaking rewrite.
+# The code uses v1.x style (OpenAI() client). An unpinned install on a cached
+# CI runner with v0.x will cause every LLM call to fail.
+openai>=1.0.0
+
+# NLP
+nltk
+numpy
+
+# FIX: torch without index URL pulls a ~2GB CUDA build in Docker.
+# Use the CPU-only wheel for server deployments (no GPU needed for distilgpt2 inference).
+# To use GPU, remove the --index-url line and install torch normally.
+# --index-url https://download.pytorch.org/whl/cpu
+torch
+transformers
+
+# File uploads
+python-multipart
+
+# WHOIS
+whois
+
+# PDF generation
+reportlab

@@ -1,0 +1,20 @@
+# Secrets — NEVER commit these
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Database
+*.db
+
+# Models (too large for GitHub)
+models/
+nltk_data/
+
+# Temp files
+temp_reports/
