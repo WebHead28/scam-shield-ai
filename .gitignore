@@ -18,3 +18,23 @@ nltk_data/
 
 # Temp files
 temp_reports/
+
+# Node
+frontend/node_modules/
+node_modules/
+
+# Large installer files
+*.deb
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Database
+*.db
+
+# Models
+models/
+nltk_data/
