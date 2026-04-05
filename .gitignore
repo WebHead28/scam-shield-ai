@@ -1,19 +1,23 @@
-# Secrets — NEVER commit these
+# Secrets
 .env
 *.env
 
-# Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+
+# Virtual environments
 venv/
 .venv/
 
 # Database
 *.db
 
-# Models (too large for GitHub)
-models/
+# ML model downloads (large files)
+backend/models/
+
+# NLTK downloads
 nltk_data/
 
 # Temp files
@@ -23,24 +27,8 @@ temp_reports/
 frontend/node_modules/
 node_modules/
 
-# Large installer files
+# Large files
 *.deb
-
-# Python
-__pycache__/
-*.pyc
-venv/
-.env
-
-# Database
-*.db
-
-# Models (too large for GitHub) - only ignore the ML models download folder
-backend/models/
-nltk_data/
-
-# Large dataset files
 *.zip
 *.tar.gz
 *.tar
-backend/dataset*.zip
