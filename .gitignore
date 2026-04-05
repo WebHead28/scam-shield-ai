@@ -35,10 +35,9 @@ venv/
 # Database
 *.db
 
-# Models
-models/
+# Models (too large for GitHub) - only ignore the ML models download folder
+backend/models/
 nltk_data/
-
 
 # Large dataset files
 *.zip
